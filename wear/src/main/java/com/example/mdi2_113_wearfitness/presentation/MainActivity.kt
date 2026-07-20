@@ -5,66 +5,50 @@
 
 package com.example.mdi2_113_wearfitness.presentation
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.ViewModelProvider
-import com.example.mdi2_113_wearfitness.presentation.notifications.FitnessNotificationManager
-import com.example.mdi2_113_wearfitness.presentation.sensors.HeartRateSensorController
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import com.example.mdi2_113_wearfitness.presentation.theme.MDI2113WearFitnessTheme
-import com.example.mdi2_113_wearfitness.presentation.viewmodel.MainViewModel
+import androidx.activity.result.contract.ActivityResultContracts
+import com.google.android.gms.wearable.Wearable
 
 class MainActivity : ComponentActivity() {
-    private val viewModel: MainViewModel by lazy {
-        ViewModelProvider(this).get(MainViewModel::class.java)
-    }
-
-    private lateinit var heartRateSensorController: HeartRateSensorController
-    private lateinit var notificationManager: FitnessNotificationManager
-
-    private val heartRatePermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-            if (isGranted) {
-                heartRateSensorController.registerHeartRateSensor()
-            }
+    private var heartRate by mutableIntStateOf(78)
+    private var stepsGoal by mutableIntStateOf(10000)
+    private lateinit var wearDataListener:  WearDataListener
+    private lateinit var heartRateSensorManager: HeartRateSensorManager
+    private val heartRatePermissionLauncher = registerForActivityResult(ActivityResultContracts
+        .RequestPermission()) { isGranted ->
+        if (isGranted){
+            heartRateSensorManager.startListening()
         }
-
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        createNotificationChannel(this)
+        heartRateSensorManager = HeartRateSensorManager(context = this, onHeartRateChange = {
+                newHeartRate -> heartRate = newHeartRate
+        })
 
-        notificationManager = FitnessNotificationManager(this)
-        notificationManager.createNotificationChannel()
-
-        heartRateSensorController = HeartRateSensorController(
-            context = this,
-            onHeartRateChanged = { heartRate ->
-                viewModel.updateHeartRate(heartRate)
-            }
-        )
-
-        val heartRatePermission = getHeartRatePermission()
-        if (
-            ContextCompat.checkSelfPermission(
-                this,
-                heartRatePermission
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            heartRatePermissionLauncher.launch(heartRatePermission)
-        } else {
-            heartRateSensorController.registerHeartRateSensor()
+        if(heartRateSensorManager.hasHeartRateSensor && !heartRateSensorManager.hasPermission()) {
+            heartRatePermissionLauncher.launch(
+                heartRateSensorManager.requiredPermission
+            )
         }
 
+        wearDataListener = WearDataListener(onStepsGoalChange = { newGoal ->
+            runOnUiThread { stepsGoal = newGoal }
+        })
         setContent {
             MDI2113WearFitnessTheme {
                 WearFitnessApp(
-                    viewModel = viewModel,
-                    notificationManager = notificationManager,
-                    hasHeartRateSensor = heartRateSensorController.hasHeartRateSensor()
+                    heartRateSensorValue = heartRate,
+                    hasHeartRateSensor = heartRateSensorManager.hasHeartRateSensor,
+                    stepsGoalFromPhone = stepsGoal
                 )
             }
         }
@@ -72,19 +56,23 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        heartRateSensorController.registerHeartRateSensor()
+        if (::heartRateSensorManager.isInitialized){
+            heartRateSensorManager.startListening()
+        }
+        if (::wearDataListener.isInitialized){
+            Wearable.getDataClient(this).addListener(wearDataListener)
+        }
     }
 
-    override fun onPause() {
-        super.onPause()
-        heartRateSensorController.unregisterHeartRateSensor()
-    }
 
-    private fun getHeartRatePermission(): String {
-        return if (Build.VERSION.SDK_INT >= 36) {
-            "android.permission.health.READ_HEART_RATE"
-        } else {
-            Manifest.permission.BODY_SENSORS
+    override fun onStop() {
+        super.onStop()
+        if (::heartRateSensorManager.isInitialized){
+            heartRateSensorManager.stopListening()
+        }
+
+        if (::wearDataListener.isInitialized){
+            Wearable.getDataClient(this).removeListener(wearDataListener)
         }
     }
 }
