@@ -25,7 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
-import com.google.firebase.firestore.FirebaseFirestore
+import com.example.mdi2_113_wearfitness.data.FirebaseRepository
 
 class MainActivity : ComponentActivity() {
 
@@ -34,59 +34,24 @@ class MainActivity : ComponentActivity() {
     ) {
         super.onCreate(savedInstanceState)
 
-        val database = FirebaseFirestore.getInstance()
-        val fitnessData = hashMapOf(
-            "dailyGoal" to 10000,
-            "steps" to 2000,
-            "heartRate" to 72
+        val repository = FirebaseRepository()
+
+        repository.updateDailyGoal(
+            dailyGoal = 555555,
+            onSuccess = {
+                Log.d(
+                    "SharedFirebase",
+                    "Goal updated from mobile"
+                )
+            },
+            onError = { exception ->
+                Log.e(
+                    "SharedFirebase",
+                    "Could not update goal",
+                    exception
+                )
+            }
         )
-        database
-            .collection("fitnessData")
-            .document("demo-user")
-            .set(fitnessData)
-            .addOnSuccessListener {
-                Log.d("FirebaseTest", "Success")
-            }
-            .addOnFailureListener { exception ->
-                Log.e("FirebaseTest", "Error", exception)
-            }
-
-        database
-            .collection("fitnessData")
-            .document("demo-user")
-            .get()
-            .addOnSuccessListener { document ->
-                val dailyGoal = document.getLong("dailyGoal") ?: 0
-                val steps = document.getLong("steps") ?: 0
-                val heartRate = document.getLong("heartRate") ?: 0
-                
-                Log.d("FirebaseTest", "Daily Goal: $dailyGoal")
-                Log.d("FirebaseTest", "Steps: $steps")
-                Log.d("FirebaseTest", "Heart Rate: $heartRate")
-            }
-            .addOnFailureListener { exception ->
-                Log.e("FirebaseTest", "Error", exception)
-            }
-
-        database
-            .collection("fitnessData")
-            .document("demo-user")
-            .addSnapshotListener { snapshot, exception ->
-                if (exception != null) {
-                    Log.e("FirebaseTest", "Error", exception)
-                    return@addSnapshotListener
-                }
-
-                if (snapshot == null || !snapshot.exists()) {
-                    Log.d("FirebaseTest", "No data")
-                    return@addSnapshotListener
-                }
-                val dailyGoal = snapshot.getLong("dailyGoal") ?: 0
-                val steps = snapshot.getLong("steps") ?: 0
-                val heartRate = snapshot.getLong("heartRate") ?: 0
-
-                Log.d("FirebaseRealTime", "Goal: $dailyGoal, Steps: $steps, Heart Rate: $heartRate")
-            }
 
         setContent {
             MaterialTheme {

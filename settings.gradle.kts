@@ -25,3 +25,4 @@ dependencyResolutionManagement {
 rootProject.name = "MDI2-113-WearFitness"
 include(":mobile")
 include(":wear")
+include(":shared")
