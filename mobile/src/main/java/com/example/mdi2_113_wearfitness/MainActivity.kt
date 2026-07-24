@@ -16,6 +16,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -28,41 +29,22 @@ import androidx.compose.ui.platform.LocalContext
 import com.example.mdi2_113_wearfitness.data.FirebaseRepository
 
 class MainActivity : ComponentActivity() {
-
     override fun onCreate(
         savedInstanceState: Bundle?
     ) {
         super.onCreate(savedInstanceState)
 
         val repository = FirebaseRepository()
-
-        repository.updateDailyGoal(
-            dailyGoal = 555555,
-            onSuccess = {
-                Log.d(
-                    "SharedFirebase",
-                    "Goal updated from mobile"
-                )
-            },
-            onError = { exception ->
-                Log.e(
-                    "SharedFirebase",
-                    "Could not update goal",
-                    exception
-                )
-            }
-        )
-
         setContent {
             MaterialTheme {
-                PhoneCompanionApp()
+                PhoneCompanionApp(repository = repository)
             }
         }
     }
 }
 
 @Composable
-fun PhoneCompanionApp() {
+fun PhoneCompanionApp(repository: FirebaseRepository) {
     val context = LocalContext.current
 
     var stepsGoal by remember {
@@ -71,6 +53,19 @@ fun PhoneCompanionApp() {
 
     var sendStatus by remember {
         mutableStateOf("Not sent")
+    }
+
+    DisposableEffect(repository) {
+        val listenerRegistration = repository.listenToFitnessData(
+            onDataChanged = { fitnessData ->
+                stepsGoal = fitnessData.dailyGoal.toInt()
+                sendStatus = "StepsGoald received from Firebase: $stepsGoal"
+            },
+            onError = { exception ->
+                Log.e("SharedFirebasePhone", "Error listening to fitness data", exception)
+            }
+        )
+        onDispose { listenerRegistration.remove() }
     }
 
     Column(
@@ -164,9 +159,22 @@ fun PhoneCompanionApp() {
             Text("Send to Watch")
         }
 
-        Spacer(
-            modifier = Modifier.height(16.dp)
-        )
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Button(
+            onClick = {
+                sendStatus = "Saving to Firebase..."
+                repository.updateDailyGoal(
+                    dailyGoal = stepsGoal.toLong(),
+                    onSuccess = { sendStatus = "Saved $stepsGoal in Firebase" },
+                    onError = { exception ->  sendStatus = "Firebase Error: " + (exception.message ?: "Unknown error") }
+                )
+            }
+        ) {
+            Text("Save to Firebase")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         Text(
             text = "Status: $sendStatus"

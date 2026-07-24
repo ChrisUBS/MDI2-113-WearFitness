@@ -17,12 +17,15 @@ import com.example.mdi2_113_wearfitness.presentation.theme.MDI2113WearFitnessThe
 import androidx.activity.result.contract.ActivityResultContracts
 import com.example.mdi2_113_wearfitness.data.FirebaseRepository
 import com.google.android.gms.wearable.Wearable
+import com.google.firebase.firestore.ListenerRegistration
 
 class MainActivity : ComponentActivity() {
     private var heartRate by mutableIntStateOf(78)
     private var stepsGoal by mutableIntStateOf(10000)
     private lateinit var wearDataListener:  WearDataListener
     private lateinit var heartRateSensorManager: HeartRateSensorManager
+    private lateinit var repository: FirebaseRepository
+    private var firebaseListener: ListenerRegistration? = null
     private val heartRatePermissionLauncher = registerForActivityResult(ActivityResultContracts
         .RequestPermission()) { isGranted ->
         if (isGranted){
@@ -32,12 +35,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val repository = FirebaseRepository()
-        repository.listenToFitnessData(
-            onDataChanged = {fitnessData ->
-                Log.d("SharedFirebaseWear", "Goal Received: ${fitnessData.dailyGoal}")
-            }
-        )
+        repository = FirebaseRepository()
 
         createNotificationChannel(this)
         heartRateSensorManager = HeartRateSensorManager(context = this, onHeartRateChange = {
@@ -72,6 +70,9 @@ class MainActivity : ComponentActivity() {
         if (::wearDataListener.isInitialized){
             Wearable.getDataClient(this).addListener(wearDataListener)
         }
+        if (::repository.isInitialized){
+            startFirebaseListener()
+        }
     }
 
 
@@ -80,9 +81,28 @@ class MainActivity : ComponentActivity() {
         if (::heartRateSensorManager.isInitialized){
             heartRateSensorManager.stopListening()
         }
-
         if (::wearDataListener.isInitialized){
             Wearable.getDataClient(this).removeListener(wearDataListener)
         }
+        stopFirebaseListener()
+    }
+
+    private fun startFirebaseListener() {
+        if (firebaseListener != null) {
+            return
+        }
+        firebaseListener = repository.listenToFitnessData(
+            onDataChanged = { fitnessData ->
+                runOnUiThread { stepsGoal = fitnessData.dailyGoal.toInt() }
+            },
+            onError = { exception ->
+                Log.e("SharedFirebaseWear", "Error listening to fitness data", exception)
+            }
+        )
+    }
+
+    private fun stopFirebaseListener() {
+        firebaseListener?.remove()
+        firebaseListener = null
     }
 }
